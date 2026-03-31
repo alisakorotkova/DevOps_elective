@@ -21,6 +21,19 @@
 }
 ```
 
+Также я разработала утилиту ‘minioci.py’, она:
+- считывает параметры из config.json
+- создает директорию контейнера /var/lib/minioci/<id>
+- создает каталоги upper, work, merged
+- создает новые PID, Mount и UTS namespaces
+- устанавливает hostname из конфигурации
+- монтирует overlayfs
+- выполняет chroot() в merged
+- монтирует /proc внутри контейнера
+- запускает указанную команду как PID=1
+- ожидает завершения процесса в foreground
+
+вот [листинг кода]([https://example.com](https://github.com/alisakorotkova/DevOps_elective/blob/main/lab1/minioci.py))
 
 
 ## Тестирование
@@ -34,3 +47,6 @@
 - overlayfs: `echo "hello from container" > /testfile` и `sudo find /var/lib/minioci/c1/upper -name testfile`
 
 ![test](test.png)
+
+По скрину видно, что контейнер запускается корректно, `hostname` устанавливается из конфигурации, процесс внутри контейнера получает PID 1, используется Alpine rootfs, `/proc` монтируется успешно, а изменения файловой системы записываются в `upperdir`.
+
