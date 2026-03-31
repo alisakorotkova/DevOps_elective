@@ -33,7 +33,7 @@
 - запускает указанную команду как PID=1
 - ожидает завершения процесса в foreground
 
-вот [листинг кода]([https://example.com](https://github.com/alisakorotkova/DevOps_elective/blob/main/lab1/minioci.py))
+вот [листинг кода](https://github.com/alisakorotkova/DevOps_elective/blob/main/lab1/minioci.py)
 
 
 ## Тестирование
