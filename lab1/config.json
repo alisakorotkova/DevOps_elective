@@ -1,0 +1,14 @@
+{
+  "ociVersion": "1.0.2",
+  "hostname": "lab1-container",
+  "root": {
+    "path": "/home/alisa/devops/lab1-docker/alpine-rootfs"
+  },
+  "process": {
+    "cwd": "/",
+    "env": [
+      "PATH=/bin:/sbin:/usr/bin:/usr/sbin"
+    ],
+    "args": ["/bin/sh"]
+  }
+}
