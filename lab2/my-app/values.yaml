@@ -1,0 +1,14 @@
+replicaCount: 2
+
+image:
+  repository: nginx
+  tag: alpine
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+  port: 80
+
+content:
+  title: "Helm!!! Helm!!!"
+  message: "Lab 2 version 3 :)"
