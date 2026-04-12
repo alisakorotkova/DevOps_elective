@@ -6,8 +6,13 @@
 
 Перед началом выполнения работы я установила kubectl и Minikube. Дальше я запустила кластер с помощью команды `minikube start --driver=docker`
 
+![test](content/1.png)
 
 Проверила статус, и что все готово к работе:
+
+![test](content/2.png)
+
+![test](content/3.png)
 
 Дальше я создала свой маленький сервис - `app.yaml` с 3 ресурсами:
 
@@ -75,7 +80,9 @@ spec:
 - Deployment: управляет набором Pod’ов и обеспечивает обновления
 - Service: дает стабильную точку входа к приложению, даже если Pod’ы меняются
 
-Чтобы запустить, я использовала команду `minikube start --driver=docker`
+Чтобы запустить, я использовала команду `kubectl apply -f k8s/app.yaml`
+
+![test](content/5.png)
 
 И проверила, что все запустилось, все команды дали результат:
 ```
@@ -84,8 +91,11 @@ kubectl get deployments
 kubectl get pods
 kubectl get services
 ```
+![test](content/6.png)
+
 Также я проверила работоспособность `minikube service hello-service --url` и открыла адрес в браузере:
 
+![test](content/7.png)
 
 ### Part 2:
 
