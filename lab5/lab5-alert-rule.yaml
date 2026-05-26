@@ -1,0 +1,21 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: lab5-podinfo-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: lab5.podinfo.rules
+      rules:
+        - alert: PodinfoNoAvailableReplicas
+          expr: kube_deployment_status_replicas_available{namespace="lab5", deployment="podinfo"} < 1
+          for: 30s
+          labels:
+            severity: critical
+            lab: lab5
+            namespace: lab5
+          annotations:
+            summary: "Podinfo has no available replicas"
+            description: "Deployment podinfo in namespace lab5 has no available replicas."

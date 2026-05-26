@@ -1,0 +1,23 @@
+alertmanager:
+  config:
+    global:
+      resolve_timeout: 1m
+
+    route:
+      group_by: ['alertname', 'namespace']
+      group_wait: 5s
+      group_interval: 15s
+      repeat_interval: 2m
+      receiver: 'null'
+      routes:
+        - receiver: 'lab5-webhook'
+          matchers:
+            - lab = "lab5"
+
+    receivers:
+      - name: 'null'
+
+      - name: 'lab5-webhook'
+        webhook_configs:
+          - url: 'http://lab5-webhook-receiver.monitoring.svc.cluster.local:8080/'
+            send_resolved: true
