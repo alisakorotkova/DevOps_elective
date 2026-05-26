@@ -12,7 +12,106 @@
 4. Build
 5. Deploy
 
+```
+name: Bad CI/CD
 
+on:
+  push:
+  pull_request:
+
+env:
+  API_KEY: "hardcoded-secret-key-12345"
+  SERVER_PASSWORD: "prod_password"
+
+jobs:
+  setup:
+    name: 1. Setup
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup floating Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install tools without fixed versions
+        run: |
+          pip install --upgrade pip
+          pip install pytest flake8
+
+  lint:
+    name: 2. Lint
+    runs-on: ubuntu-latest
+    needs: setup
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup floating Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install flake8 without fixed version
+        run: pip install flake8
+
+      - name: Run lint and ignore errors
+        run: flake8 app.py tests || true
+
+  test:
+    name: 3. Test
+    runs-on: ubuntu-latest
+    needs: lint
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup floating Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install pytest without fixed version
+        run: pip install pytest
+
+      - name: Run tests and ignore errors
+        run: pytest || true
+
+  build:
+    name: 4. Build
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build archive
+        run: |
+          mkdir -p dist
+          tar -czf dist/app.tar.gz app.py tests requirements.txt
+
+  deploy:
+    name: 5. Deploy
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Fake deploy from any branch or pull request
+        run: |
+          echo "Deploy started"
+          echo "Using API_KEY=$API_KEY"
+          echo "Using SERVER_PASSWORD=$SERVER_PASSWORD"
+          echo "Deploy finished"
+
+```
 
 **Good CI/CD**
 
@@ -22,7 +121,134 @@
 4. Build
 5. Deploy
 
+```
+name: Good CI/CD
 
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    name: 1. Validate
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup fixed Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate Python syntax
+        run: python -m py_compile app.py
+
+  lint:
+    name: 2. Lint
+    runs-on: ubuntu-24.04
+    needs: validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup fixed Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies from requirements.txt
+        run: python -m pip install -r requirements.txt
+
+      - name: Run lint
+        run: flake8 app.py tests
+
+  test:
+    name: 3. Test
+    runs-on: ubuntu-24.04
+    needs: validate
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup fixed Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies from requirements.txt
+        run: python -m pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest
+
+  build:
+    name: 4. Build
+    runs-on: ubuntu-24.04
+    needs:
+      - lint
+      - test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build archive
+        run: |
+          mkdir -p dist
+          tar -czf dist/app.tar.gz app.py tests requirements.txt README.md
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-build
+          path: dist/app.tar.gz
+
+  deploy:
+    name: 5. Deploy
+    runs-on: ubuntu-24.04
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    env:
+      API_KEY: ${{ secrets.DEPLOY_API_KEY }}
+      SERVER_PASSWORD: ${{ secrets.SERVER_PASSWORD }}
+
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-build
+          path: dist
+
+      - name: Safe fake deploy
+        run: |
+          echo "Deploy started"
+
+          if [ -z "$API_KEY" ]; then
+            echo "DEPLOY_API_KEY is not configured"
+          else
+            echo "DEPLOY_API_KEY is configured"
+          fi
+
+          if [ -z "$SERVER_PASSWORD" ]; then
+            echo "SERVER_PASSWORD is not configured"
+          else
+            echo "SERVER_PASSWORD is configured"
+          fi
+
+          echo "Artifact:"
+          ls -la dist
+
+          echo "Deploy finished"
+```
 
 #### БЭД practice 1 - secrets
 
