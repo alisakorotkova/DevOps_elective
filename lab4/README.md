@@ -419,3 +419,255 @@ if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
 
 ## Часть 2
+
+
+Сначала я установила minikube и запустила локальный Kubernetes-кластер:
+
+![test](content/install.png)
+
+![test](content/start.png)
+
+После этого я установила HashiCorp Vault в namespace `vault`:
+
+```bash
+helm install vault . \
+  --namespace vault \
+  --create-namespace \
+  --set "server.dev.enabled=true" \
+  --set "server.dev.devRootToken=root"
+```
+![test](content/add.png)
+![test](content/vault_install.png)
+ 
+Я использовала dev-режим, потому что он проще для локальной демонстрации. Потом я проверила, что pod Vault запустился:
+
+```bash
+kubectl get pods -n vault
+```
+
+![test](content/get_pods.png)
+
+
+Чтобы Vault мог проверять Kubernetes ServiceAccount токены, я добавила clusterrolebinding (Vault теперь имеет право проверять ServiceAccount токены через Kubernetes TokenReview API):
+
+```bash
+kubectl create clusterrolebinding vault-tokenreview-binding \
+  --clusterrole=system:auth-delegator \
+  --serviceaccount=vault:vault \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+![test](content/cluster.png)
+
+
+Дальше я включила Kubernetes Auth method в Vault, чтобы он смог проверять, какой ServiceAccount обращается за секретом:
+
+```bash
+kubectl -n vault exec vault-0 -- sh -c '
+export VAULT_ADDR=http://127.0.0.1:8200
+export VAULT_TOKEN=root
+
+vault auth enable kubernetes || true
+
+vault write auth/kubernetes/config \
+  token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+  kubernetes_host="https://kubernetes.default.svc:443" \
+  kubernetes_ca_cert=@/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+'
+```
+
+![test](content/auth.png)
+
+
+Я добавила секрет в Vault:
+
+```bash
+kubectl -n vault exec vault-0 -- sh -c '
+export VAULT_ADDR=http://127.0.0.1:8200
+export VAULT_TOKEN=root
+
+vault kv put secret/lab4 \
+  API_KEY="vault-api-key-12345" \
+  SERVER_PASSWORD="vault-password-12345"
+'
+```
+
+![test](content/secret.png)
+
+
+Затем я создала ServiceAccount для сервиса, который будет обращаться к Vault:
+
+```bash
+kubectl create serviceaccount lab4-vault-reader \
+  --dry-run=client -o yaml | kubectl apply -f -
+```
+
+![test](content/acc.png)
+
+
+После этого я создала Vault policy:
+
+```bash
+kubectl -n vault exec -i vault-0 -- sh <<'EOF'
+export VAULT_ADDR=http://127.0.0.1:8200
+export VAULT_TOKEN=root
+
+vault policy write lab4-policy - <<POLICY
+path "secret/data/lab4" {
+  capabilities = ["read"]
+}
+POLICY
+EOF
+```
+
+![test](content/policy.png)
+
+
+То есть у сервиса нет полного доступ ко всем секретам. Эта policy разрешает только чтение секрета по пути:
+
+```text
+secret/data/lab4
+```
+
+Дальше я создала Vault role:
+
+```bash
+kubectl -n vault exec vault-0 -- sh -c '
+export VAULT_ADDR=http://127.0.0.1:8200
+export VAULT_TOKEN=root
+
+vault write auth/kubernetes/role/lab4-role \
+  bound_service_account_names=lab4-vault-reader \
+  bound_service_account_namespaces=default \
+  policies=lab4-policy \
+  ttl=1h
+'
+```
+
+![test](content/role.png)
+
+
+Эта команда связала между собой:
+
+- Kubernetes ServiceAccount `lab4-vault-reader`
+- Vault policy `lab4-policy`
+- Vault role `lab4-role`
+
+Теперь сервис с этим ServiceAccount может получить временный Vault token и прочитать только разрешенный секрет.
+
+
+Я создала файл `vault-secret-reader-job.yaml`:
+
+```
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vault-secret-reader
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      serviceAccountName: lab4-vault-reader
+      restartPolicy: Never
+      containers:
+        - name: reader
+          image: hashicorp/vault:1.20.4
+          env:
+            - name: VAULT_ADDR
+              value: "http://vault.vault.svc.cluster.local:8200"
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+
+              echo "Starting service..."
+              echo "Trying to authenticate in Vault using Kubernetes ServiceAccount..."
+
+              JWT="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
+
+              VAULT_TOKEN="$(vault write -field=token auth/kubernetes/login role=lab4-role jwt="$JWT")"
+
+              echo "Authentication successful"
+              echo "Trying to read secret from Vault..."
+
+              API_KEY="$(VAULT_TOKEN="$VAULT_TOKEN" vault kv get -field=API_KEY secret/lab4)"
+              SERVER_PASSWORD="$(VAULT_TOKEN="$VAULT_TOKEN" vault kv get -field=SERVER_PASSWORD secret/lab4)"
+
+              if [ -n "$API_KEY" ] && [ -n "$SERVER_PASSWORD" ]; then
+                echo "Secret was successfully received from Vault"
+                echo "API_KEY length: ${#API_KEY}"
+                echo "SERVER_PASSWORD length: ${#SERVER_PASSWORD}"
+                echo "Secret values are not printed to logs"
+              else
+                echo "Secret was not received"
+                exit 1
+              fi
+
+              echo "Service finished successfully"
+```
+
+`vault-secret-reader` Job:
+1. запускается с ServiceAccount `lab4-vault-reader`
+2. авторизуется в Vault через Kubernetes Auth
+3. получает секрет из Vault
+4. проверяет, что секрет был получен
+5. не выводит значение секрета в логи
+
+И потом запустила Job:
+
+```bash
+kubectl apply -f part2-vault/vault-secret-reader-job.yaml
+```
+
+![test](content/created.png)
+
+
+Я проверила логи Job:
+
+```bash
+kubectl logs job/vault-secret-reader
+```
+
+![test](content/logs.png)
+
+
+В логах было видно, что сервис успешно авторизовался в Vault и получил секрет. При этом сами значения секретов в логах не отображались.
+
+![test](content/site.png)
+
+
+Для второй части я также добавила отдельный GitHub Actions workflow, и там выполняются такие проверки:
+1. файл `vault-secret-reader-job.yaml` существует
+2. в файле нет захардкоженных секретов
+3. используется `VAULT_ADDR`
+4. используется Kubernetes ServiceAccount `lab4-vault-reader`
+5. используется Vault role `lab4-role`
+
+![test](content/git.png)
+
+
+
+## Почему такой способ является хорошей практикой
+
+Я считаю этот способ более безопасным и красивым, потому что:
+
+- секреты хранятся централизованно в отдельном secret manager
+- приложение получает доступ только к нужному секрету
+- доступ ограничен через Vault policy
+- используется Kubernetes ServiceAccount, а не хардкод токен
+- Vault выдает временный токен с ограниченным временем жизни
+- секреты не лежат в YAML-файлах проекта
+- секреты не отображаются в логах
+
+
+## Почему хранение секретов в CI/CD переменных репозитория не всегда является хорошей практикой
+
+Хранение секретов в CI/CD переменных репозитория лучше, чем хранение секретов прямо в коде, но это не является хорошей практикой.
+
+Минусы такого подхода:
+- секреты привязаны к конкретному репозиторию
+- если проектов много, секретами сложнее централизованно управлять
+- сложнее контролировать, какой сервис к какому секрету имеет доступ
+- секреты часто доступны всему pipeline, хотя нужны только одному шагу
+- нет такой гибкой системы policy, как в Vault
+- сложнее организовать временные токены с коротким сроком жизни
+
