@@ -24,6 +24,57 @@ mkcert \
 
 **Далее я настроила конфиг:**
 
+```
+    #Перенаправление HTTP на HTTPS
+    server {
+        listen 80;
+        server_name project1.test project2.test;
+
+        return 301 https://$host$request_uri;
+    }
+
+    #Первый виртуальный хост
+    server {
+        listen 443 ssl;
+        server_name project1.test;
+
+        ssl_certificate     /opt/homebrew/var/www/nginx-lab/certs/lab.crt;
+        ssl_certificate_key /opt/homebrew/var/www/nginx-lab/certs/lab.key;
+
+        root /opt/homebrew/var/www/nginx-lab/project1;
+        index index.html;
+
+        location / {
+            try_files $uri $uri/ =404;
+        }
+
+        # alias:
+        location /shared/ {
+            alias /opt/homebrew/var/www/nginx-lab/shared/;
+        }
+    }
+
+    #Второй виртуальный хост
+    server {
+        listen 443 ssl;
+        server_name project2.test;
+
+        ssl_certificate     /opt/homebrew/var/www/nginx-lab/certs/lab.crt;
+        ssl_certificate_key /opt/homebrew/var/www/nginx-lab/certs/lab.key;
+
+        root /opt/homebrew/var/www/nginx-lab/project2;
+        index index.html;
+
+        location / {
+            try_files $uri $uri/ =404;
+        }
+
+        # alias:
+        location /shared/ {
+            alias /opt/homebrew/var/www/nginx-lab/shared/;
+        }
+    }
+```
 
 **Дальше я проверила работоспособность:**
 
