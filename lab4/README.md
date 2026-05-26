@@ -1,8 +1,6 @@
 # Лабораторная работа 4 (базовый-трек)
 
-## Ход выполнения
-
-### Часть 1
+## Часть 1
 
 **Bad CI/CD**
 
@@ -249,7 +247,13 @@ jobs:
 
           echo "Deploy finished"
 ```
+### Роботоспособность:
 
+![test](content/bad.png)
+
+![test](content/good.png)
+
+### Плохие практики и исправления:
 #### БЭД practice 1 - secrets
 
 ```yaml
@@ -413,3 +417,5 @@ if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 - снижается риск случайного deploy
 - процесс становится безопаснее и контролируемее
 
+
+## Часть 2
